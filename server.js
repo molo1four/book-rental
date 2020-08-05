@@ -18,3 +18,7 @@ const PORT = process.env.PORT || 5800;
 app.listen(PORT, () => {
   console.log("App listening on port 5800!");
 });
+
+app.get("/", (req, res) => {
+  res.status(200).json({ success: true });
+});
