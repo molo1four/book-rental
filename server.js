@@ -8,6 +8,8 @@ const books = require("./routes/books");
 //익스프레스 연결
 const app = express();
 
+app.use(express.json());
+
 //라우터 처리 부분
 app.use("/api/v1/books", books);
 
