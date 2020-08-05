@@ -2,9 +2,10 @@ const connection = require("../db/mysql_connection");
 const validator = require("validator");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const moment = require("moment");
 
 // @desc    회원가입
-// @route   POST /api/v1/users
+// @route   POST /api/v1/books/users
 // @parameters  email, password
 exports.createUser = async (req, res, next) => {
   let email = req.body.email;
@@ -53,7 +54,7 @@ exports.createUser = async (req, res, next) => {
 
 // 로그인 api를 개발.
 // @desc    로그인
-// @route   POST /api/v1/users/login
+// @route   POST /api/v1/books/users/login
 // @parameters email, passwd
 exports.loginUser = async (req, res, next) => {
   let email = req.body.email;
@@ -95,7 +96,7 @@ exports.loginUser = async (req, res, next) => {
 };
 
 // @desc  로그아웃 api : DB에 해당 유저의 현재 토큰값을 삭제
-// @route POST /api/v1/users/logout
+// @route POST /api/v1/books/users/logout
 // @parameters  no
 exports.logout = async (req, res, next) => {
   // 토큰테이블에서 현재 이 헤더에 있는 토큰으로 삭제한다
@@ -114,5 +115,107 @@ exports.logout = async (req, res, next) => {
     }
   } catch (e) {
     res.status(500).json({ success: false, error: e });
+  }
+};
+
+// @desc  모든 책 목록 불러오기 api
+// @route GET /api/v1/books/
+// @parameters  offset, limit
+exports.getBooks = async (req, res, next) => {
+  let offset = req.query.offset;
+  let limit = req.query.limit;
+
+  let query = `select * from book limit ${offset},${limit}`;
+  try {
+    const [rows, fields] = await connection.query(query);
+    res.status(200).json({ success: true, items: rows });
+  } catch (e) {
+    console.log(e);
+    next(new ErrorResponse("도서목록을 가져오는 중 에러 발생", 400));
+  }
+};
+
+// @desc  책 선택 대여 api
+// @route POST /api/v1/books/
+// @parameters no
+exports.rentalBook = async (req, res, next) => {
+  let book_id = req.body.book_id;
+  let user_id = req.user.id;
+  let token = req.user.token;
+
+  var today = new Date(); //현재 날짜 및 시간   //현재시간 기준 계산
+  let limit_date = new Date(Date.parse(today) + 7 * 1000 * 60 * 60 * 24); //일주일후
+  limit_date = moment(limit_date).utc().format("YYYY-MM-DD HH:mm:ss");
+
+  let query = `SELECT * FROM book_user AS BU , book AS B WHERE BU.age >= B.limit_age AND B.id = ${book_id} AND BU.id = ${user_id};`;
+  try {
+    [rows] = await connection.query(query);
+    console.log(rows.length);
+    if (rows.length == 0) {
+      res.status(400).json();
+      return;
+    }
+  } catch (e) {
+    res.status(500).json();
+    return;
+  }
+
+  query = `insert into book_rental (book_id,user_id,limit_date) values (${book_id},${user_id},"${limit_date}")`;
+  try {
+    [result] = await connection.query(query);
+    res.status(200).json({ success: true, result });
+  } catch (e) {
+    res.status(500).json(e);
+    return;
+  }
+};
+
+// @desc  내가 대여 중인 책목록 api
+// @route GET /api/v1/books/rental
+// @parameters no
+exports.rentalbookList = async (req, res, next) => {
+  let user_id = req.user.id;
+
+  let query = `select * from book_rental as br join book as b on r.book_id = b.id where user_id = ${user_id} `;
+
+  try {
+    [result] = await connection.query(query);
+    res.status(200).json({ success: true, result: result });
+  } catch (e) {
+    console.log(e);
+    res.status(400).json({ e });
+  }
+};
+
+// @desc  내가 대여한 책 반납
+// @route GET /api/v1/books/rental
+// @parameters no
+exports.returnBook = async (req, res, next) => {
+  let user_id = req.user.id;
+  let token = req.user.token;
+  let book_id = req.body.book_id;
+
+  let query = `select * from book_user_token where user_id = ${user_id} and token = "${token}"`;
+
+  try {
+    [rows] = await connection.query(query);
+    console.log(rows.length);
+    if (rows.length == 0) {
+      res.status(400).json();
+      return;
+    }
+  } catch (e) {
+    res.status(500).json();
+    return;
+  }
+
+  query = `delete from book_rental where book_id = ${book_id}`;
+
+  try {
+    [result] = await connection.query(query);
+    res.status(200).json({ success: true, result: result });
+  } catch (e) {
+    console.log(e);
+    res.status(400).json({ e });
   }
 };
